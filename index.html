@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFC Audio Pairing and Player</title>
+</head>
+<body>
+  <h1>NFC Audio Pairing and Player</h1>
+
+  <p>This tool lets you pair NFC tags with audio files and play them in Player Mode.</p>
+
+  <!-- Main Interface -->
+  <div id="record-mode">
+    <button id="start-scan">Start NFC Scan</button>
+    <p id="status">Status: Ready</p>
+
+    <h2>Current Pairs</h2>
+    <ul id="pair-list"></ul>
+
+    <h2>Upload Existing JSON File</h2>
+    <input type="file" id="file-upload" accept=".json">
+    <p id="file-status">No file uploaded.</p>
+
+    <h2>Add New Pair</h2>
+    <label for="tag-id">Tag ID:</label>
+    <input type="text" id="tag-id" readonly>
+    <br>
+    <label for="tag-name">Name:</label>
+    <input type="text" id="tag-name">
+    <br>
+    <label for="audio-file">Audio File:</label>
+    <input type="file" id="audio-file" accept="audio/*,video/*">
+    <br>
+    <button id="add-pair">Add Pair</button>
+
+    <h2>Download Updated JSON</h2>
+    <button id="download-json">Download JSON</button>
+    <br><br>
+    <button id="player-mode">Switch to Player Mode</button>
+  </div>
+
+  <!-- Player Mode -->
+  <div id="player-mode-interface" style="display: none;">
+    <h2>Player Mode</h2>
+    <p>Scan an NFC tag to play its associated audio.</p>
+    <p id="player-status">Status: Waiting for NFC tag...</p>
+    <button id="record-mode-button">Switch to Record Mode</button>
+  </div>
+
+  <script>
+    let pairs = {};
+
+    // Main Interface: Start NFC scanning
+    document.getElementById("start-scan").addEventListener("click", async () => {
+      if ('NDEFReader' in window) {
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          document.getElementById("status").textContent = "Status: Scanning for NFC tags...";
+          ndef.onreading = (event) => {
+            const tagId = event.serialNumber || "Unknown ID";
+            document.getElementById("tag-id").value = tagId;
+          };
+        } catch (error) {
+          console.error("NFC Scan failed:", error);
+          document.getElementById("status").textContent = "Status: NFC scan failed.";
+        }
+      } else {
+        alert("NFC is not supported in your browser.");
+      }
+    });
+
+    // Add new pair
+    document.getElementById("add-pair").addEventListener("click", () => {
+      const tagId = document.getElementById("tag-id").value.trim();
+      const tagName = document.getElementById("tag-name").value.trim();
+      const audioFile = document.getElementById("audio-file").files[0];
+
+      if (tagId && tagName && audioFile) {
+        const audioURL = URL.createObjectURL(audioFile);
+        pairs[tagId] = { name: tagName, audio: audioURL };
+        updatePairList();
+        document.getElementById("tag-name").value = "";
+        document.getElementById("audio-file").value = "";
+        alert("Pair added successfully.");
+      } else {
+        alert("Please scan a tag, enter a name, and select an audio file.");
+      }
+    });
+
+    // Update the list of pairs displayed on the page
+    function updatePairList() {
+      const pairList = document.getElementById("pair-list");
+      pairList.innerHTML = "";
+      for (const [id, { name }] of Object.entries(pairs)) {
+        const listItem = document.createElement("li");
+        listItem.textContent = `${id}: ${name}`;
+        pairList.appendChild(listItem);
+      }
+    }
+
+    // Upload an existing JSON file
+    document.getElementById("file-upload").addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            pairs = JSON.parse(reader.result);
+            updatePairList();
+            document.getElementById("file-status").textContent = "File loaded successfully.";
+          } catch (error) {
+            alert("Invalid JSON file.");
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Download the updated JSON file
+    document.getElementById("download-json").addEventListener("click", () => {
+      const dataStr = JSON.stringify(pairs, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "nfc-pairs.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Switch to Player Mode
+    document.getElementById("player-mode").addEventListener("click", () => {
+      document.getElementById("record-mode").style.display = "none";
+      document.getElementById("player-mode-interface").style.display = "block";
+
+      if ('NDEFReader' in window) {
+        const ndef = new NDEFReader();
+        ndef.scan().then(() => {
+          document.getElementById("player-status").textContent = "Status: Scanning for NFC tags...";
+          ndef.onreading = (event) => {
+            const tagId = event.serialNumber || "Unknown ID";
+            if (pairs[tagId] && pairs[tagId].audio) {
+              const audio = new Audio(pairs[tagId].audio);
+              audio.play().then(() => {
+                console.log(`Playing audio for tag: ${tagId}`);
+              }).catch(error => {
+                console.error("Error playing audio:", error);
+              });
+            } else {
+              document.getElementById("player-status").textContent = "Tag not paired with an audio file.";
+            }
+          };
+        }).catch(error => {
+          console.error("NFC Scan failed:", error);
+          document.getElementById("player-status").textContent = "NFC scan failed.";
+        });
+      }
+    });
+
+    // Switch to Record Mode
+    document.getElementById("record-mode-button").addEventListener("click", () => {
+      document.getElementById("record-mode").style.display = "block";
+      document.getElementById("player-mode-interface").style.display = "none";
+    });
+  </script>
+</body>
+</html>
