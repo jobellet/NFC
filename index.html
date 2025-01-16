@@ -51,23 +51,54 @@
   <script>
     let pairs = {};
 
+    // Utility function: Update the list of pairs on the page
+    function updatePairList() {
+      const pairList = document.getElementById("pair-list");
+      pairList.innerHTML = "";
+      for (const [id, { name }] of Object.entries(pairs)) {
+        const listItem = document.createElement("li");
+        listItem.textContent = `${id}: ${name}`;
+        pairList.appendChild(listItem);
+      }
+    }
+
+    // Check if NDEFReader is supported
+    function isWebNfcSupported() {
+      return ('NDEFReader' in window);
+    }
+
     // Main Interface: Start NFC scanning
     document.getElementById("start-scan").addEventListener("click", async () => {
-      if ('NDEFReader' in window) {
-        try {
-          const ndef = new NDEFReader();
-          await ndef.scan();
-          document.getElementById("status").textContent = "Status: Scanning for NFC tags...";
-          ndef.onreading = (event) => {
-            const tagId = event.serialNumber || "Unknown ID";
-            document.getElementById("tag-id").value = tagId;
-          };
-        } catch (error) {
-          console.error("NFC Scan failed:", error);
-          document.getElementById("status").textContent = "Status: NFC scan failed.";
-        }
-      } else {
+      if (!window.isSecureContext) {
+        alert("Web NFC only works in secure contexts (HTTPS). Please use https or localhost.");
+        return;
+      }
+
+      if (!isWebNfcSupported()) {
         alert("NFC is not supported in your browser.");
+        return;
+      }
+
+      try {
+        const ndef = new NDEFReader();
+        await ndef.scan();
+        document.getElementById("status").textContent = "Status: Scanning for NFC tags...";
+
+        ndef.onreading = (event) => {
+          console.log("NFC reading event:", event);
+          const tagId = event.serialNumber || "No serialNumber in event";
+          console.log("Detected Tag ID:", tagId);
+          document.getElementById("tag-id").value = tagId;
+          document.getElementById("status").textContent = `Status: Tag detected: ${tagId}`;
+        };
+
+        ndef.onreadingerror = (err) => {
+          console.error("Reading error:", err);
+          document.getElementById("status").textContent = "Status: Reading error.";
+        };
+      } catch (error) {
+        console.error("NFC Scan failed:", error);
+        document.getElementById("status").textContent = "Status: NFC scan failed.";
       }
     });
 
@@ -81,6 +112,7 @@
         const audioURL = URL.createObjectURL(audioFile);
         pairs[tagId] = { name: tagName, audio: audioURL };
         updatePairList();
+
         document.getElementById("tag-name").value = "";
         document.getElementById("audio-file").value = "";
         alert("Pair added successfully.");
@@ -88,17 +120,6 @@
         alert("Please scan a tag, enter a name, and select an audio file.");
       }
     });
-
-    // Update the list of pairs displayed on the page
-    function updatePairList() {
-      const pairList = document.getElementById("pair-list");
-      pairList.innerHTML = "";
-      for (const [id, { name }] of Object.entries(pairs)) {
-        const listItem = document.createElement("li");
-        listItem.textContent = `${id}: ${name}`;
-        pairList.appendChild(listItem);
-      }
-    }
 
     // Upload an existing JSON file
     document.getElementById("file-upload").addEventListener("change", (event) => {
@@ -135,12 +156,18 @@
       document.getElementById("record-mode").style.display = "none";
       document.getElementById("player-mode-interface").style.display = "block";
 
-      if ('NDEFReader' in window) {
+      if (!window.isSecureContext) {
+        alert("Web NFC only works in secure contexts (HTTPS). Please use https or localhost.");
+        return;
+      }
+
+      if (isWebNfcSupported()) {
         const ndef = new NDEFReader();
         ndef.scan().then(() => {
           document.getElementById("player-status").textContent = "Status: Scanning for NFC tags...";
           ndef.onreading = (event) => {
-            const tagId = event.serialNumber || "Unknown ID";
+            console.log("Player Mode read event:", event);
+            const tagId = event.serialNumber || "No serialNumber in event";
             if (pairs[tagId] && pairs[tagId].audio) {
               const audio = new Audio(pairs[tagId].audio);
               audio.play().then(() => {
@@ -152,10 +179,17 @@
               document.getElementById("player-status").textContent = "Tag not paired with an audio file.";
             }
           };
+
+          ndef.onreadingerror = (err) => {
+            console.error("Reading error:", err);
+            document.getElementById("player-status").textContent = "Reading error.";
+          };
         }).catch(error => {
           console.error("NFC Scan failed:", error);
           document.getElementById("player-status").textContent = "NFC scan failed.";
         });
+      } else {
+        alert("NFC is not supported in this browser.");
       }
     });
 
